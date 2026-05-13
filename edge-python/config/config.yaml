@@ -1,0 +1,83 @@
+# 边缘端配置文件 - 智慧水利水质监测系统
+device:
+  id: "RPI4B-2026-001"
+  type: "raspberry_pi"  # raspberry_pi / jetson_nano
+
+camera:
+  source: 0  # 摄像头索引，0为默认摄像头
+  fps: 20
+  resolution: [640, 480]
+  buffer_size: 30  # 循环缓冲区帧数
+
+sensors:
+  - type: "ph"
+    port: "/dev/ttyUSB0"
+    slave_address: 1
+    baudrate: 9600
+    range: [0.0, 14.0]
+  - type: "turbidity"
+    port: "/dev/ttyUSB1"
+    slave_address: 2
+    baudrate: 9600
+    range: [0.0, 1000.0]
+  - type: "cod"
+    port: "/dev/ttyUSB2"
+    slave_address: 3
+    baudrate: 9600
+    range: [0.0, 100.0]
+  read_interval: 1.0  # 传感器读取间隔(秒)
+  retry_count: 3
+  timeout: 2.0
+
+model:
+  mobilenet_path: "models/mobilenet_v2_quantized.tflite"
+  unet_path: "models/unet_quantized.tflite"
+  input_size: [224, 224]
+  num_threads: 4  # TensorFlow Lite推理线程数
+  confidence_threshold: 0.5
+
+fusion:
+  image_weight: 0.6
+  sensor_weight: 0.4
+  time_window_ms: 500
+  turbidity_threshold: 80.0
+  cod_threshold: 50.0
+  alert_thresholds:
+    normal: 0.4
+    mild: 0.7
+    moderate: 0.9
+    severe: 1.0
+
+mqtt:
+  broker: "localhost"
+  port: 1883
+  client_id_prefix: "edge-"
+  qos: 1
+  topic_image: "/wqi/{point_id}/image_analysis"
+  topic_sensor: "/wqi/{point_id}/sensor_data"
+  keepalive: 30
+  reconnect_interval: 10
+
+cache:
+  db_path: "data/local_cache.db"
+  max_size_mb: 500
+  hot_zone_threshold: 100  # 热数据区条目数
+  cold_zone_threshold: 500  # 冷数据区条目数
+  protected_alert_days: 7  # 异常数据保护天数
+  cleanup_interval: 300  # 清理检查间隔(秒)
+
+network:
+  heartbeat_interval: 30
+  offline_threshold: 90
+  probe_interval: 10
+  probe_retry_count: 3
+
+logging:
+  level: "INFO"  # DEBUG / INFO / WARN / ERROR
+  file: "logs/edge.log"
+  max_size_mb: 100
+  backup_count: 30
+
+thread_pool:
+  worker_count: 8  # CPU核心数的两倍
+  queue_size: 30
