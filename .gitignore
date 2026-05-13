@@ -21,6 +21,14 @@ cloud-backend/logs/
 .DS_Store
 Thumbs.db
 
+# Non-code artifacts
+*.docx
+*.pdf
+*.png
+*.jpg
+*.csv
+cloud-backend/.mvn/wrapper/maven-wrapper.jar
+
 # Temp files
 convert_report.py
 *.yaml
