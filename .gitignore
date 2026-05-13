@@ -1,0 +1,27 @@
+# Maven build output
+cloud-backend/target/
+cloud-backend/maven/
+cloud-backend/maven.zip
+
+# Python cache
+edge-python/**/__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Logs
+cloud-backend/logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+convert_report.py
+*.yaml
+!edge-python/config/config.yaml
