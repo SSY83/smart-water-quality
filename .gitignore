@@ -33,3 +33,4 @@ cloud-backend/.mvn/wrapper/maven-wrapper.jar
 convert_report.py
 *.yaml
 !edge-python/config/config.yaml
+*.txt
