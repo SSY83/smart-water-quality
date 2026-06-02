@@ -15,7 +15,7 @@ public class QueryParams {
     private Integer page = 1;
 
     @Min(1)
-    @Max(100)
+    @Max(500)
     private Integer pageSize = 20;
 
     public boolean validate() {

@@ -1,0 +1,171 @@
+syntax = "proto3";
+
+package com.waterquality.proto;
+
+option java_package = "com.waterquality.proto";
+option java_multiple_files = true;
+
+// 边缘端上报的水质分析消息
+message WaterQualityMessage {
+
+  // 消息类型
+  enum MessageType {
+    UNKNOWN = 0;
+    IMAGE_ANALYSIS = 1;
+    SENSOR_DATA = 2;
+    HEARTBEAT = 3;
+    ALERT = 4;
+  }
+
+  MessageType type = 1;
+
+  // 监测点ID
+  string point_id = 2;
+
+  // 时间戳 (ISO-8601)
+  string timestamp = 3;
+
+  // 设备ID
+  string device_id = 4;
+
+  // 影像分析结果
+  ImageAnalysis image_analysis = 5;
+
+  // 传感器数据
+  SensorData sensor_data = 6;
+
+  // 告警数据
+  AlertData alert_data = 7;
+
+  // 心跳数据
+  HeartbeatData heartbeat = 8;
+}
+
+// 影像分析结果
+message ImageAnalysis {
+  int32 turbidity_level = 1;           // 0-清晰,1-轻度,2-中度,3-重度
+  repeated float pollution_probs = 2;  // 各类污染物概率 [浑浊,藻类,工业污染,正常]
+  float confidence = 3;
+  float image_score = 4;
+  string pollution_types = 5;          // 逗号分隔的污染类型
+  bytes segmentation_mask = 6;         // U-Net分割掩码(可选)
+}
+
+// 传感器数据
+message SensorData {
+  float turbidity_ntu = 1;              // 浊度 (NTU)
+  float cod_value = 2;                 // COD (mg/L)
+  float ph_value = 3;                  // pH值
+  float temperature = 4;               // 水温 (摄氏度, 可选)
+  float dissolved_oxygen = 5;          // 溶解氧 (mg/L, 可选)
+}
+
+// 告警数据
+message AlertData {
+  int32 alert_level = 1;               // 0-正常,1-轻度,2-中度,3-重度
+  float final_score = 2;               // 融合分数
+  float confidence = 3;                // 置信度
+  string alert_message = 4;            // 告警描述
+}
+
+// 心跳数据
+message HeartbeatData {
+  int64 cache_queue_length = 1;        // 缓存队列长度
+  float cpu_usage = 2;                 // CPU使用率
+  float memory_usage = 3;              // 内存使用率
+  int32 uptime_seconds = 4;            // 运行时长
+}
+
+// ============================================================
+// gRPC Service Messages
+// ============================================================
+
+// Cloud-to-Edge 指令 (双向流中下发给边缘端)
+message EdgeCommand {
+  enum CommandType {
+    ACK = 0;
+    MODEL_UPDATE_AVAILABLE = 1;
+    CONFIG_UPDATE = 2;
+    SHUTDOWN = 3;
+    RESTART_CAPTURE = 4;
+  }
+  CommandType type = 1;
+  string command_id = 2;
+  string message = 3;
+  string payload_json = 4;
+  int64 server_timestamp_ms = 5;
+}
+
+// ReportAlert
+message AlertRequest {
+  string point_id = 1;
+  string device_id = 2;
+  int32 alert_level = 3;
+  string alert_type = 4;
+  float final_score = 5;
+  float confidence = 6;
+  string alert_message = 7;
+  string timestamp_iso8601 = 8;
+}
+
+message AlertResponse {
+  string alert_id = 1;
+  string status = 2;
+  string handling_instruction = 3;
+  int64 server_timestamp_ms = 4;
+}
+
+// GetModelVersion
+message ModelVersionRequest {
+  string device_id = 1;
+  string current_mobilenet_version = 2;
+  string current_unet_version = 3;
+  string device_type = 4;
+}
+
+message ModelVersionResponse {
+  string latest_mobilenet_version = 1;
+  string latest_unet_version = 2;
+  bool mobilenet_update_available = 3;
+  bool unet_update_available = 4;
+  string mobilenet_download_url = 5;
+  string unet_download_url = 6;
+  string mobilenet_checksum_sha256 = 7;
+  string unet_checksum_sha256 = 8;
+  int64 server_timestamp_ms = 9;
+}
+
+// HealthCheck
+message HealthCheckRequest {
+  string device_id = 1;
+  float cpu_usage_percent = 2;
+  float memory_usage_percent = 3;
+  float storage_usage_percent = 4;
+  int32 uptime_seconds = 5;
+  int32 cache_queue_length = 6;
+  float edge_temperature_celsius = 7;
+}
+
+message HealthCheckResponse {
+  string status = 1;
+  int64 server_timestamp_ms = 2;
+  int32 recommended_heartbeat_interval_sec = 3;
+}
+
+// ============================================================
+// gRPC Service Definition
+// ============================================================
+
+service WaterQualityEdgeService {
+  // 双向流: 边缘端持续上报分析结果，云端下发指令/ACK
+  rpc StreamAnalysisResults (stream WaterQualityMessage) returns (stream EdgeCommand);
+
+  // 高优先级告警上报 (需ACK确认)
+  rpc ReportAlert (AlertRequest) returns (AlertResponse);
+
+  // 模型版本检查
+  rpc GetModelVersion (ModelVersionRequest) returns (ModelVersionResponse);
+
+  // 健康检查
+  rpc HealthCheck (HealthCheckRequest) returns (HealthCheckResponse);
+}

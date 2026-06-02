@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智慧水利 — 水质智能监测与预警系统 v2.1</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus/dist/index.css">
+<style>
+:root { --primary: #1a73e8; --success: #0d9e6c; --warning: #e6a817; --danger: #d93025; --bg-dark: #0f172a; --bg-card: #1e293b; --text-primary: #e2e8f0; --text-secondary: #94a3b8; --border-color: #334155; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg-dark); color: var(--text-primary); }
+#app { height:100vh; }
+
+.login-container { min-height:100vh; display:flex; align-items:center; justify-content:center; background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 50%, #0f172a 100%); }
+.login-card { width:420px; padding:40px; background: rgba(30,41,59,0.95); border-radius:16px; border:1px solid rgba(59,130,246,0.2); box-shadow:0 20px 60px rgba(0,0,0,0.5); }
+.login-card h2 { color:#e2e8f0; text-align:center; margin-bottom:8px; font-size:24px; }
+.login-card .subtitle { color:#94a3b8; text-align:center; margin-bottom:32px; font-size:14px; }
+
+.main-layout { display:flex; height:100vh; }
+.sidebar { width:220px; background: rgba(15,23,42,0.95); border-right:1px solid var(--border-color); display:flex; flex-direction:column; flex-shrink:0; }
+.sidebar-header { padding:20px 16px; border-bottom:1px solid var(--border-color); }
+.sidebar-header h3 { color:#60a5fa; font-size:15px; }
+.sidebar-header .ver { color:var(--text-secondary); font-size:11px; }
+.sidebar-menu { flex:1; padding:8px 0; overflow-y:auto; }
+.menu-item { display:flex; align-items:center; gap:10px; padding:12px 20px; cursor:pointer; color:var(--text-secondary); font-size:14px; transition:all 0.2s; border-left:3px solid transparent; }
+.menu-item:hover { background:rgba(59,130,246,0.1); color:#e2e8f0; }
+.menu-item.active { background:rgba(59,130,246,0.15); color:#60a5fa; border-left-color:#3b82f6; }
+.sidebar-footer { padding:12px 16px; border-top:1px solid var(--border-color); display:flex; align-items:center; gap:8px; }
+.sidebar-footer .user { color:var(--text-primary); font-size:13px; flex:1; }
+
+.main-content { flex:1; overflow-y:auto; padding:24px; }
+.page-title { color:#e2e8f0; font-size:22px; margin-bottom:20px; font-weight:600; }
+
+.stats-row { display:grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap:16px; margin-bottom:24px; }
+.stat-card { background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; padding:20px; display:flex; align-items:center; gap:16px; }
+.stat-icon { width:48px; height:48px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:24px; }
+.stat-value { color:#e2e8f0; font-size:28px; font-weight:700; }
+.stat-label { color:var(--text-secondary); font-size:13px; margin-top:2px; }
+
+.panel { background:var(--bg-card); border:1px solid var(--border-color); border-radius:12px; padding:20px; margin-bottom:20px; }
+.panel-title { color:#e2e8f0; font-size:16px; font-weight:600; margin-bottom:16px; }
+
+.data-table { width:100%; border-collapse:collapse; }
+.data-table th { text-align:left; padding:10px 12px; color:var(--text-secondary); font-size:12px; font-weight:600; text-transform:uppercase; border-bottom:1px solid var(--border-color); }
+.data-table td { padding:10px 12px; color:var(--text-primary); font-size:13px; border-bottom:1px solid rgba(51,65,85,0.5); }
+.data-table tr:hover td { background:rgba(59,130,246,0.05); }
+
+.badge { padding:2px 10px; border-radius:20px; font-size:12px; font-weight:500; display:inline-block; }
+.badge-success { background:rgba(13,158,108,0.15); color:#34d399; }
+.badge-warning { background:rgba(230,168,23,0.15); color:#fbbf24; }
+.badge-danger { background:rgba(217,48,37,0.15); color:#f87171; }
+.badge-info { background:rgba(59,130,246,0.15); color:#60a5fa; }
+
+.alert-toast { position:fixed; top:20px; right:20px; z-index:9999; max-width:400px; padding:16px 20px; border-radius:10px; color:#fff; font-size:14px; animation:slideIn 0.3s ease; box-shadow:0 8px 32px rgba(0,0,0,0.4); }
+.alert-toast.severe { background:linear-gradient(135deg, #dc2626, #991b1b); }
+.alert-toast.moderate { background:linear-gradient(135deg, #d97706, #92400e); }
+.alert-toast.mild { background:linear-gradient(135deg, #2563eb, #1e40af); }
+@keyframes slideIn { from { opacity:0; transform:translateX(100%); } to { opacity:1; transform:translateX(0); } }
+
+.chart-container { width:100%; height:380px; }
+::-webkit-scrollbar { width:6px; } ::-webkit-scrollbar-track { background:transparent; } ::-webkit-scrollbar-thumb { background:#475569; border-radius:3px; }
+
+.form-group { margin-bottom:20px; }
+.form-group label { display:block; color:var(--text-secondary); font-size:13px; margin-bottom:6px; }
+.form-input { width:100%; padding:10px 14px; background:rgba(15,23,42,0.8); border:1px solid var(--border-color); border-radius:8px; color:#e2e8f0; font-size:14px; outline:none; }
+.form-input:focus { border-color:#3b82f6; }
+.form-select { padding:8px 12px; background:rgba(15,23,42,0.8); border:1px solid var(--border-color); border-radius:8px; color:#e2e8f0; font-size:13px; outline:none; }
+
+.btn { padding:10px 24px; border:none; border-radius:8px; font-size:14px; cursor:pointer; font-weight:500; transition:all 0.2s; }
+.btn-primary { background:#3b82f6; color:#fff; } .btn-primary:hover { background:#2563eb; }
+.btn-danger { background:#dc2626; color:#fff; } .btn-danger:hover { background:#b91c1c; }
+.btn-outline { background:transparent; border:1px solid var(--border-color); color:#e2e8f0; } .btn-outline:hover { border-color:#3b82f6; color:#60a5fa; }
+.btn-sm { padding:6px 14px; font-size:12px; }
+.btn:disabled { opacity:0.5; cursor:not-allowed; }
+
+.flex-row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.flex-between { display:flex; justify-content:space-between; align-items:center; }
+.loading-text { color:var(--text-secondary); text-align:center; padding:40px; }
+.empty-text { color:var(--text-secondary); text-align:center; padding:60px 20px; font-size:14px; }
+.page-desc { color:var(--text-secondary); font-size:13px; margin-bottom:16px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- ======================== Login ======================== -->
+  <div v-if="!token" class="login-container">
+    <div class="login-card">
+      <h2>智慧水利监测系统</h2>
+      <div class="subtitle">Smart Water Quality Monitoring</div>
+      <div style="color:#f87171;text-align:center;margin-bottom:16px;font-size:13px" v-if="loginError">{{ loginError }}</div>
+      <div class="form-group">
+        <label>用户名</label>
+        <input class="form-input" v-model="loginForm.username" placeholder="请输入用户名" @keyup.enter="doLogin">
+      </div>
+      <div class="form-group">
+        <label>密码</label>
+        <input class="form-input" type="password" v-model="loginForm.password" placeholder="请输入密码" @keyup.enter="doLogin">
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;padding:12px" @click="doLogin" :disabled="loggingIn">
+        {{ loggingIn ? '登录中...' : '登 录' }}
+      </button>
+      <div style="text-align:center;margin-top:20px;color:var(--text-secondary);font-size:12px">默认账号: admin / admin123</div>
+    </div>
+  </div>
+
+  <!-- ======================== Main App ======================== -->
+  <div v-else class="main-layout">
+    <div class="sidebar">
+      <div class="sidebar-header"><h3>水质监测系统</h3><div class="ver">v2.1.0 · 智慧水利</div></div>
+      <div class="sidebar-menu">
+        <div v-for="m in menus" :key="m.key" class="menu-item" :class="{ active: currentPage === m.key }" @click="navigateTo(m.key)">
+          <span v-html="m.icon"></span>{{ m.label }}
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="user">{{ username }} ({{ role }})</div>
+        <button class="btn btn-outline btn-sm" @click="logout">退出</button>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <!-- ========== Dashboard ========== -->
+      <div v-if="currentPage === 'dashboard'">
+        <div class="page-title">系统仪表盘</div>
+        <div class="flex-row" style="margin-bottom:16px">
+          <span class="page-desc">实时概览 · 最近更新 {{ lastRefresh }}</span>
+          <button class="btn btn-outline btn-sm" @click="loadDashboard">刷新</button>
+        </div>
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.15)">📍</div><div><div class="stat-value">{{ dashboard.pointCount }}</div><div class="stat-label">监测点总数</div></div></div>
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(13,158,108,0.15)">✅</div><div><div class="stat-value">{{ dashboard.onlineCount }}</div><div class="stat-label">在线监测点</div></div></div>
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(217,48,37,0.15)">🚨</div><div><div class="stat-value">{{ dashboard.alertTotal }}</div><div class="stat-label">近7天告警</div></div></div>
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(230,168,23,0.15)">🔌</div><div><div class="stat-value">{{ dashboard.wsCount }}</div><div class="stat-label">WebSocket连接</div></div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+          <div class="panel">
+            <div class="panel-title">系统资源</div>
+            <div v-if="dashboard.sys" style="line-height:2.2">
+              <div>堆内存: <b>{{ dashboard.sys.memory?.heapUsedMB || 0 }} MB</b> / {{ dashboard.sys.memory?.heapMaxMB || 0 }} MB ({{ dashboard.sys.memory?.heapUsagePercent || 0 }}%)</div>
+              <div>线程: <b>{{ dashboard.sys.threads?.totalThreads || 0 }}</b> (峰值 {{ dashboard.sys.threads?.peakThreads || 0 }})</div>
+              <div>GC: <b>{{ dashboard.sys.gc?.[0]?.count || 0 }}</b> 次 / {{ dashboard.sys.gc?.[0]?.timeMs || 0 }} ms</div>
+              <div>运行时长: <b>{{ dashboard.sys.uptimeMinutes || 0 }}</b> 分钟</div>
+              <div>黑名单Token: <b>{{ dashboard.sys.blacklistedTokens || 0 }}</b></div>
+            </div>
+            <div v-else class="loading-text">加载中...</div>
+          </div>
+          <div class="panel">
+            <div class="panel-title">监测点状态</div>
+            <table class="data-table" v-if="dashboard.points && dashboard.points.length">
+              <thead><tr><th>名称</th><th>状态</th><th>最近告警</th></tr></thead>
+              <tbody>
+                <tr v-for="p in dashboard.points" :key="p.id">
+                  <td>{{ p.name }}</td>
+                  <td><span :class="'badge '+(p.status===1?'badge-success':'badge-danger')">{{ p.status===1?'在线':'离线' }}</span></td>
+                  <td><span :class="'badge badge-'+alertClass(p.recentLevel||0)">{{ alertText(p.recentLevel||0) }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+            <div v-else class="empty-text">暂无监测点</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== Alerts ========== -->
+      <div v-if="currentPage === 'alerts'">
+        <div class="page-title">告警管理</div>
+        <div class="flex-between" style="margin-bottom:16px">
+          <div class="flex-row">
+            <select class="form-select" v-model="alertFilter.level"><option value="">全部等级</option><option value="1">轻度</option><option value="2">中度</option><option value="3">重度</option></select>
+            <select class="form-select" v-model="alertFilter.status"><option value="">全部状态</option><option value="pending">待推送</option><option value="sent">已推送</option><option value="confirmed">已确认</option><option value="dismissed">已解除</option></select>
+            <select class="form-select" v-model="alertFilter.pointId"><option value="">全部监测点</option><option v-for="p in monitoringPoints" :key="p.id" :value="p.id">{{ p.name }}</option></select>
+            <button class="btn btn-outline btn-sm" @click="loadAlerts">刷新</button>
+          </div>
+          <span style="font-size:13px">WebSocket: <span :style="{color:wsConnected?'#34d399':'#f87171'}">{{ wsConnected ? '已连接' : '未连接' }}</span></span>
+        </div>
+        <div class="panel">
+          <table class="data-table" v-if="alerts.length">
+            <thead><tr><th>ID</th><th>监测点</th><th>等级</th><th>类型</th><th>分数</th><th>推送</th><th>时间</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr v-for="a in alerts" :key="a.id">
+                <td>{{ a.id }}</td><td>{{ getPointName(a.pointId) }}</td>
+                <td><span :class="'badge badge-'+alertClass(a.alertLevel)">{{ alertText(a.alertLevel) }}</span></td>
+                <td>{{ a.alertType || '-' }}</td>
+                <td>{{ a.finalScore ? a.finalScore.toFixed(2) : '-' }}</td>
+                <td><span :class="'badge badge-'+(a.pushStatus==='sent'||a.pushStatus==='confirmed'?'success':a.pushStatus==='pending'?'warning':'info')">{{ a.pushStatus || 'pending' }}</span></td>
+                <td>{{ fmtTime(a.createTime) }}</td>
+                <td>
+                  <button class="btn btn-outline btn-sm" @click="confirmAlert(a.id)" v-if="a.pushStatus!=='confirmed'&&a.pushStatus!=='dismissed'">确认</button>
+                  <button class="btn btn-outline btn-sm" style="margin-left:4px" @click="dismissAlert(a.id)" v-if="a.pushStatus!=='dismissed'">解除</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else class="empty-text">暂无告警记录</div>
+        </div>
+      </div>
+
+      <!-- ========== Visualization ========== -->
+      <div v-if="currentPage === 'visualization'">
+        <div class="page-title">数据可视化</div>
+        <div class="flex-row" style="margin-bottom:16px">
+          <select class="form-select" v-model="vizPointId"><option value="">选择监测点</option><option v-for="p in monitoringPoints" :key="p.id" :value="p.id">{{ p.name }}</option></select>
+          <select class="form-select" v-model="vizHours" style="width:130px"><option :value="24">24小时</option><option :value="72">3天</option><option :value="168">7天</option><option :value="720">30天</option></select>
+          <button class="btn btn-primary btn-sm" @click="loadTrend" :disabled="!vizPointId">趋势图</button>
+          <button class="btn btn-outline btn-sm" @click="loadHeatmap">热力图</button>
+        </div>
+        <div class="panel" v-if="trendLoading"><div class="loading-text">加载中...</div></div>
+        <div class="panel" v-if="trendData && !trendLoading">
+          <div class="panel-title">水质趋势 — {{ getPointName(vizPointId) }}</div>
+          <div class="chart-container" id="trendChart"></div>
+          <div class="data-fallback" v-if="trendData && trendData.length > 0">
+            <div class="panel-title" style="margin-top:16px">原始数据 ({{ trendData.length }} 条)</div>
+            <table class="data-table"><thead><tr><th>时间</th><th>浊度(NTU)</th><th>COD(mg/L)</th><th>pH</th><th>告警等级</th></tr></thead><tbody>
+              <tr v-for="d in trendData.slice(0,100)" :key="d.timestamp"><td>{{ d.timestamp }}</td><td>{{ d.turbidityNtu }}</td><td>{{ d.codValue }}</td><td>{{ d.phValue }}</td><td><span :class="'badge badge-'+alertClass(d.alertLevel)">{{ alertText(d.alertLevel) }}</span></td></tr>
+            </tbody></table>
+          </div>
+        </div>
+        <div class="panel" v-if="heatmapLoading"><div class="loading-text">加载中...</div></div>
+        <div class="panel" v-if="heatmapData && !heatmapLoading">
+          <div class="panel-title">监测点热力图 — {{ heatmapData.length }} 个监测点</div>
+          <div class="chart-container" id="heatmapChart"></div>
+          <div class="data-fallback" v-if="heatmapData && heatmapData.length > 0">
+            <div class="panel-title" style="margin-top:16px">聚合数据 ({{ heatmapData.length }} 个点)</div>
+            <table class="data-table"><thead><tr><th>监测点</th><th>平均浊度</th><th>平均COD</th><th>平均pH</th><th>平均告警</th><th>数据量</th></tr></thead><tbody>
+              <tr v-for="d in heatmapData" :key="d.pointId"><td>{{ getPointName(d.pointId) }}</td><td>{{ d.avgTurbidity }}</td><td>{{ d.avgCod }}</td><td>{{ d.avgPh }}</td><td>{{ d.avgAlert }}</td><td>{{ d.count }}</td></tr>
+            </tbody></table>
+          </div>
+        </div>
+        <div class="panel" v-if="!trendData && !heatmapData && !trendLoading && !heatmapLoading">
+          <div class="empty-text">请选择监测点并点击"趋势图"或"热力图"</div>
+        </div>
+      </div>
+
+      <!-- ========== Monitoring Points ========== -->
+      <div v-if="currentPage === 'monitoring'">
+        <div class="page-title">监测点管理</div>
+        <div class="flex-row" style="margin-bottom:16px">
+          <button class="btn btn-outline btn-sm" @click="loadMonitoringPoints">刷新</button>
+          <span class="page-desc">共 {{ monitoringPoints.length }} 个监测点</span>
+        </div>
+        <div class="panel">
+          <table class="data-table" v-if="monitoringPoints.length">
+            <thead><tr><th>ID</th><th>名称</th><th>经度</th><th>纬度</th><th>联系人</th><th>状态</th><th>创建时间</th></tr></thead>
+            <tbody>
+              <tr v-for="p in monitoringPoints" :key="p.id">
+                <td>{{ p.id }}</td><td>{{ p.name }}</td>
+                <td>{{ p.longitude }}</td><td>{{ p.latitude }}</td>
+                <td>{{ p.contactPhone || '-' }}</td>
+                <td><span :class="'badge '+(p.status===1?'badge-success':'badge-danger')">{{ p.status===1?'在线':'离线' }}</span></td>
+                <td>{{ fmtTime(p.createTime) }}</td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else class="loading-text">加载中...</div>
+        </div>
+      </div>
+
+      <!-- ========== System Monitor ========== -->
+      <div v-if="currentPage === 'system'">
+        <div class="page-title">系统监控</div>
+        <div class="flex-row" style="margin-bottom:16px"><button class="btn btn-outline btn-sm" @click="loadSystemMonitor">刷新</button></div>
+        <div class="stats-row" v-if="sysMonitor">
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.15)">💾</div><div><div class="stat-value">{{ sysMonitor.memory?.heapUsedMB }}MB</div><div class="stat-label">堆内存 / {{ sysMonitor.memory?.heapMaxMB }}MB</div></div></div>
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(13,158,108,0.15)">🧵</div><div><div class="stat-value">{{ sysMonitor.threads?.totalThreads }}</div><div class="stat-label">线程 (峰值{{ sysMonitor.threads?.peakThreads }})</div></div></div>
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(230,168,23,0.15)">🔌</div><div><div class="stat-value">{{ sysMonitor.activeWebSockets }}</div><div class="stat-label">WebSocket连接</div></div></div>
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(217,48,37,0.15)">⏱️</div><div><div class="stat-value">{{ sysMonitor.uptimeMinutes }}min</div><div class="stat-label">运行时长</div></div></div>
+        </div>
+        <div class="panel" v-if="sysMonitor">
+          <div class="panel-title">GC详情</div>
+          <table class="data-table">
+            <thead><tr><th>名称</th><th>次数</th><th>耗时(ms)</th></tr></thead>
+            <tbody><tr v-for="gc in sysMonitor.gc" :key="gc.name"><td>{{ gc.name }}</td><td>{{ gc.count }}</td><td>{{ gc.timeMs }}</td></tr></tbody>
+          </table>
+        </div>
+        <div class="empty-text" v-if="!sysMonitor">点击刷新加载系统监控数据</div>
+      </div>
+
+      <!-- ========== Statistics ========== -->
+      <div v-if="currentPage === 'statistics'">
+        <div class="page-title">告警统计</div>
+        <div class="flex-row" style="margin-bottom:16px">
+          <select class="form-select" v-model="statsPointId"><option value="">全部监测点</option><option v-for="p in monitoringPoints" :key="p.id" :value="p.id">{{ p.name }}</option></select>
+          <button class="btn btn-primary btn-sm" @click="loadStatistics">查询</button>
+        </div>
+        <div class="stats-row" v-if="alertStats">
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(59,130,246,0.15)">📋</div><div><div class="stat-value">{{ alertStats.total || alertStats.totalAlerts || 0 }}</div><div class="stat-label">总告警数</div></div></div>
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(13,158,108,0.15)">✅</div><div><div class="stat-value">{{ alertStats.confirmed || 0 }}</div><div class="stat-label">已确认</div></div></div>
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(217,48,37,0.15)">❌</div><div><div class="stat-value">{{ alertStats.failed || 0 }}</div><div class="stat-label">推送失败</div></div></div>
+          <div class="stat-card"><div class="stat-icon" style="background:rgba(230,168,23,0.15)">📊</div><div><div class="stat-value">{{ alertStats.confirmRate || 0 }}%</div><div class="stat-label">确认率</div></div></div>
+        </div>
+        <div class="panel" v-if="alertStats && alertStats.levelDistribution">
+          <div class="panel-title">等级分布</div>
+          <table class="data-table">
+            <thead><tr><th>等级</th><th>数量</th><th>占比</th></tr></thead>
+            <tbody>
+              <tr v-for="(count, level) in alertStats.levelDistribution" :key="level">
+                <td><span :class="'badge badge-'+alertClass(parseInt(level))">{{ alertText(parseInt(level)) }}</span></td>
+                <td>{{ count }}</td>
+                <td>{{ (alertStats.total||alertStats.totalAlerts||1) ? Math.round(count/(alertStats.total||alertStats.totalAlerts)*100) : 0 }}%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="empty-text" v-if="!alertStats">请选择监测点并点击查询</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alert toast overlay -->
+  <div v-for="(t, i) in alertToasts" :key="t.id" class="alert-toast" :class="t.cls" :style="{ top: (20+i*85)+'px' }">
+    <strong>{{ t.title }}</strong>
+    <div style="margin-top:4px;font-size:12px;opacity:0.9">{{ t.msg }}</div>
+    <div style="margin-top:4px;font-size:11px;opacity:0.7">{{ t.time }}</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.prod.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<script>
+const { createApp } = Vue;
+
+createApp({
+  data() {
+    return {
+      token: localStorage.getItem('wq_token') || '',
+      username: localStorage.getItem('wq_username') || '',
+      role: localStorage.getItem('wq_role') || '',
+      currentPage: 'dashboard',
+      loginForm: { username: 'admin', password: 'admin123' },
+      loginError: '', loggingIn: false,
+      wsConnected: false, wsReconnectTimer: null,
+      alertToasts: [], toastId: 0, lastRefresh: '',
+      refreshTimer: null,
+
+      menus: [
+        { key: 'dashboard', label: '仪表盘', icon: '&#128202;' },
+        { key: 'alerts', label: '告警管理', icon: '&#128276;' },
+        { key: 'visualization', label: '数据可视化', icon: '&#128200;' },
+        { key: 'monitoring', label: '监测点管理', icon: '&#128205;' },
+        { key: 'system', label: '系统监控', icon: '&#9881;' },
+        { key: 'statistics', label: '告警统计', icon: '&#128203;' },
+      ],
+
+      dashboard: { pointCount:0, onlineCount:0, alertTotal:0, wsCount:0, sys:null, points:[] },
+      alerts: [],
+      alertFilter: { level:'', status:'', pointId:'' },
+      monitoringPoints: [],
+      vizPointId: '', vizHours: 168,
+      trendData: null, trendLoading: false,
+      heatmapData: null, heatmapLoading: false,
+      sysMonitor: null,
+      statsPointId: '', alertStats: null,
+    };
+  },
+
+  created() {
+    if (this.token) {
+      this.loadMonitoringPoints();
+      this.connectWebSocket();
+      this.navigateTo('dashboard');
+    }
+  },
+
+  beforeUnmount() {
+    if (this.refreshTimer) clearInterval(this.refreshTimer);
+    if (this.wsReconnectTimer) clearTimeout(this.wsReconnectTimer);
+  },
+
+  methods: {
+    // ======================== API ========================
+    async api(path, opts = {}) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (this.token) headers['Authorization'] = 'Bearer ' + this.token;
+      const res = await fetch(path, { headers, ...opts });
+      const json = await res.json();
+      if (json.code !== '0000') {
+        if (json.code === '1002') { this.logout(); throw new Error('Token已过期'); }
+        console.warn('API ' + path + ' error:', json.code, json.message);
+      }
+      return json;
+    },
+
+    // ======================== Auth ========================
+    async doLogin() {
+      this.loggingIn = true; this.loginError = '';
+      try {
+        const res = await this.api('/api/auth/login', { method:'POST', body:JSON.stringify(this.loginForm) });
+        if (res.code === '0000') {
+          this.token = res.data.token; this.username = res.data.username; this.role = res.data.role;
+          localStorage.setItem('wq_token', this.token); localStorage.setItem('wq_username', this.username); localStorage.setItem('wq_role', this.role);
+          this.loadMonitoringPoints();
+          this.connectWebSocket();
+          this.navigateTo('dashboard');
+        } else { this.loginError = res.message || '登录失败'; }
+      } catch(e) { this.loginError = '请求失败: ' + e.message; }
+      this.loggingIn = false;
+    },
+
+    logout() {
+      this.api('/api/auth/logout', { method:'POST' }).catch(()=>{});
+      localStorage.clear();
+      if (this._ws) this._ws.close();
+      if (this.refreshTimer) clearInterval(this.refreshTimer);
+      this.token = ''; this.username = ''; this.role = '';
+    },
+
+    // ======================== Navigation ========================
+    navigateTo(page) {
+      this.currentPage = page;
+      if (page === 'dashboard') this.loadDashboard();
+      else if (page === 'alerts') this.loadAlerts();
+      else if (page === 'visualization') this.loadMonitoringPoints();
+      else if (page === 'monitoring') this.loadMonitoringPoints();
+      else if (page === 'statistics') this.loadMonitoringPoints();
+      else if (page === 'system') this.loadSystemMonitor();
+    },
+
+    // ======================== Dashboard ========================
+    async loadDashboard() {
+      try {
+        const [sysRes, ptsRes] = await Promise.all([
+          this.api('/api/system/dashboard'),
+          this.api('/api/monitoring-points')
+        ]);
+        if (sysRes.code === '0000') this.dashboard.sys = sysRes.data;
+        if (sysRes.data) this.dashboard.wsCount = sysRes.data.activeWebSockets || 0;
+
+        if (ptsRes.code === '0000' && ptsRes.data) {
+          const pts = Array.isArray(ptsRes.data) ? ptsRes.data : [];
+          this.dashboard.pointCount = pts.length;
+          this.dashboard.onlineCount = pts.filter(p => p.status === 1).length;
+
+          // Enrich points with recent alert level
+          const enriched = await Promise.all(pts.slice(0, 6).map(async p => {
+            try {
+              const aRes = await this.api('/api/alerts/point/' + p.id + '?limit=1');
+              const alerts = aRes.code === '0000' && Array.isArray(aRes.data) ? aRes.data : [];
+              return { ...p, recentLevel: alerts.length > 0 ? alerts[0].alertLevel : 0 };
+            } catch(e) { return { ...p, recentLevel: 0 }; }
+          }));
+          this.dashboard.points = enriched;
+        }
+
+        // Count recent alerts
+        let totalAlerts = 0;
+        if (this.dashboard.points.length > 0) {
+          for (const p of this.dashboard.points.slice(0, 6)) {
+            try {
+              const aRes = await this.api('/api/alerts/point/' + p.id + '?limit=100');
+              if (aRes.code === '0000' && Array.isArray(aRes.data)) totalAlerts += aRes.data.length;
+            } catch(e) {}
+          }
+        }
+        this.dashboard.alertTotal = totalAlerts;
+        this.lastRefresh = new Date().toLocaleTimeString('zh-CN', { hour12:false });
+      } catch(e) { console.error('Dashboard load error:', e); }
+
+      // Auto refresh every 30s
+      if (this.refreshTimer) clearInterval(this.refreshTimer);
+      this.refreshTimer = setInterval(() => {
+        if (this.currentPage === 'dashboard') this.loadDashboard();
+      }, 30000);
+    },
+
+    // ======================== Alerts ========================
+    async loadAlerts() {
+      try {
+        let allAlerts = [];
+        if (this.alertFilter.pointId) {
+          const res = await this.api('/api/alerts/point/' + this.alertFilter.pointId + '?limit=100');
+          allAlerts = res.code === '0000' && Array.isArray(res.data) ? res.data : [];
+        } else {
+          // Fetch alerts for all points
+          const pts = this.monitoringPoints.length > 0 ? this.monitoringPoints : [];
+          const results = await Promise.allSettled(
+            pts.map(p => this.api('/api/alerts/point/' + p.id + '?limit=50'))
+          );
+          for (const r of results) {
+            if (r.status === 'fulfilled' && r.value.code === '0000' && Array.isArray(r.value.data)) {
+              allAlerts = allAlerts.concat(r.value.data);
+            }
+          }
+        }
+
+        // Client-side filters
+        if (this.alertFilter.level) {
+          allAlerts = allAlerts.filter(a => a.alertLevel == this.alertFilter.level);
+        }
+        if (this.alertFilter.status) {
+          allAlerts = allAlerts.filter(a => a.pushStatus === this.alertFilter.status);
+        }
+
+        // Sort by time descending
+        allAlerts.sort((a, b) => new Date(b.createTime||b.timestamp||0) - new Date(a.createTime||a.timestamp||0));
+        this.alerts = allAlerts.slice(0, 100);
+      } catch(e) { console.error('Alerts load error:', e); }
+    },
+
+    async confirmAlert(id) {
+      await this.api('/api/alerts/' + id + '/confirm', { method:'POST' });
+      this.loadAlerts();
+    },
+    async dismissAlert(id) {
+      await this.api('/api/alerts/' + id + '/dismiss', { method:'POST' });
+      this.loadAlerts();
+    },
+
+    // ======================== Monitoring Points ========================
+    async loadMonitoringPoints() {
+      try {
+        const res = await this.api('/api/monitoring-points');
+        this.monitoringPoints = (res.code === '0000' && Array.isArray(res.data)) ? res.data : [];
+      } catch(e) { console.error('Points load error:', e); }
+    },
+
+    // ======================== Visualization ========================
+    formatLocal(d) { const pad=n=>String(n).padStart(2,'0'); return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'T'+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds()); },
+
+    async loadTrend() {
+      console.log('[Trend] loadTrend called, vizPointId=', this.vizPointId, 'type=', typeof this.vizPointId);
+      if (!this.vizPointId) return;
+      this.trendLoading = true; this.trendData = null; this.heatmapData = null;
+      try {
+        const now = new Date();
+        const end = this.formatLocal(now);
+        const start = this.formatLocal(new Date(now.getTime() - this.vizHours * 3600000));
+        const body = {
+          pointIds: [parseInt(this.vizPointId)],
+          startTime: start,
+          endTime: end,
+          page: 1, pageSize: 100
+        };
+        console.log('[Trend] sending API request:', body);
+        const res = await this.api('/api/visualization/trend', {
+          method:'POST',
+          body: JSON.stringify(body)
+        });
+        console.log('[Trend] API response code=', res.code, 'dataLen=', res.data ? res.data.length : 'null');
+        if (res.code === '0000' && Array.isArray(res.data) && res.data.length > 0) {
+          this.trendData = res.data;
+          this.heatmapData = null;
+          console.log('[Trend] trendData set, scheduling renderTrend');
+          setTimeout(() => this.renderTrend(), 100);
+        } else {
+          console.log('[Trend] data condition not met: code='+res.code+' isArray='+Array.isArray(res.data)+' len='+(res.data?res.data.length:'null'));
+        }
+      } catch(e) { console.error('Trend load error:', e); }
+      this.trendLoading = false;
+    },
+
+    async loadHeatmap() {
+      this.heatmapLoading = true; this.heatmapData = null; this.trendData = null;
+      try {
+        const pts = this.monitoringPoints.length > 0 ? this.monitoringPoints : [];
+        if (pts.length === 0) { this.heatmapLoading = false; return; }
+        const now = new Date();
+        const end = this.formatLocal(now);
+        const start = this.formatLocal(new Date(now.getTime() - 24 * 3600000));
+        const res = await this.api('/api/visualization/heatmap', {
+          method:'POST',
+          body: JSON.stringify({
+            pointIds: pts.map(p => p.id),
+            startTime: start,
+            endTime: end
+          })
+        });
+        if (res.code === '0000' && Array.isArray(res.data) && res.data.length > 0) {
+          this.heatmapData = res.data;
+          this.trendData = null;
+          setTimeout(() => this.renderHeatmap(), 100);
+        }
+      } catch(e) { console.error('Heatmap load error:', e); }
+      this.heatmapLoading = false;
+    },
+
+    renderTrend() {
+      console.log('[Trend] renderTrend called');
+      const el = document.getElementById('trendChart');
+      console.log('[Trend] element=', el, 'trendData=', this.trendData ? this.trendData.length : null);
+      if (!el || !this.trendData) { console.log('[Trend] early return: el='+!!el+' trendData='+!!this.trendData); return; }
+      if (typeof echarts === 'undefined') { console.log('[Trend] echarts is undefined!'); el.innerHTML = '<div style="color:#f59e0b;padding:20px;text-align:center">ECharts 库加载失败，请检查网络。下方表格可查看原始数据。</div>'; return; }
+      try {
+        const prev = echarts.getInstanceByDom(el);
+        if (prev) prev.dispose();
+        const chart = echarts.init(el);
+        const data = this.trendData;
+        const times = data.map(d => {
+          const dt = new Date(d.timestamp); return dt.getHours()+':'+String(dt.getMinutes()).padStart(2,'0');
+        });
+        const turb = data.map(d => d.turbidityNtu != null ? parseFloat(d.turbidityNtu) : null);
+        const cod = data.map(d => d.codValue != null ? parseFloat(d.codValue) : null);
+        const ph = data.map(d => d.phValue != null ? parseFloat(d.phValue) : null);
+        const alvl = data.map(d => d.alertLevel != null ? parseInt(d.alertLevel) : 0);
+
+        chart.setOption({
+          tooltip: { trigger:'axis' },
+          legend: { data:['浊度(NTU)','COD(mg/L)','pH','告警等级'], textStyle:{ color:'#94a3b8' }, top:5 },
+          grid: { left:60, right:60, top:60, bottom:40 },
+          xAxis: { type:'category', data:times, axisLabel:{ color:'#94a3b8', fontSize:10 } },
+          yAxis: [
+            { type:'value', name:'NTU/mg/L', nameTextStyle:{ color:'#94a3b8' }, axisLabel:{ color:'#94a3b8' }, splitLine:{ lineStyle:{ color:'#334155' } } },
+            { type:'value', name:'pH', min:0, max:14, nameTextStyle:{ color:'#94a3b8' }, axisLabel:{ color:'#94a3b8' }, splitLine:{ show:false } },
+          ],
+          series: [
+            { name:'浊度(NTU)', type:'line', data:turb, smooth:true, lineStyle:{ color:'#f59e0b' }, itemStyle:{ color:'#f59e0b' }, connectNulls:true },
+            { name:'COD(mg/L)', type:'line', data:cod, smooth:true, lineStyle:{ color:'#3b82f6' }, itemStyle:{ color:'#3b82f6' }, connectNulls:true },
+            { name:'pH', type:'line', yAxisIndex:1, data:ph, smooth:true, lineStyle:{ color:'#10b981' }, itemStyle:{ color:'#10b981' }, connectNulls:true },
+            { name:'告警等级', type:'line', data:alvl, smooth:true, lineStyle:{ color:'#ef4444', type:'dashed', width:1.5 }, itemStyle:{ color:'#ef4444' }, connectNulls:true },
+          ]
+        });
+        setTimeout(() => chart.resize(), 50);
+        const resize = () => chart.resize();
+        window.addEventListener('resize', resize);
+        chart._resize = resize;
+      } catch(e) { console.error('Trend render error:', e); el.innerHTML = '<div style="color:#ef4444;padding:20px;text-align:center">图表渲染失败: '+e.message+'</div>'; }
+    },
+
+    renderHeatmap() {
+      const el = document.getElementById('heatmapChart');
+      if (!el || !this.heatmapData) return;
+      if (typeof echarts === 'undefined') { el.innerHTML = '<div style="color:#f59e0b;padding:20px;text-align:center">ECharts 库加载失败，请检查网络。下方表格可查看原始数据。</div>'; return; }
+      try {
+        const prev = echarts.getInstanceByDom(el);
+        if (prev) prev.dispose();
+        const chart = echarts.init(el);
+        const data = this.heatmapData;
+        const points = data.map(d => this.getPointName(d.pointId) || 'P'+d.pointId);
+
+        chart.setOption({
+          tooltip: { trigger:'axis', axisPointer:{ type:'shadow' } },
+          grid: { left:120, right:40, top:10, bottom:30 },
+          xAxis: { type:'value', name:'平均值', axisLabel:{ color:'#94a3b8' }, splitLine:{ lineStyle:{ color:'#334155' } } },
+          yAxis: { type:'category', data:points, axisLabel:{ color:'#94a3b8', fontSize:11 } },
+          series: [
+            { name:'平均浊度', type:'bar', data:data.map(d => parseFloat(d.avgTurbidity||0)), itemStyle:{ color:'#f59e0b' } },
+            { name:'平均COD', type:'bar', data:data.map(d => parseFloat(d.avgCod||0)), itemStyle:{ color:'#3b82f6' } },
+            { name:'平均告警', type:'bar', data:data.map(d => parseFloat(d.avgAlert||0)), itemStyle:{ color:'#ef4444' } },
+          ]
+        });
+        setTimeout(() => chart.resize(), 50);
+        const resize = () => chart.resize();
+        window.addEventListener('resize', resize);
+        chart._resize = resize;
+      } catch(e) { console.error('Heatmap render error:', e); el.innerHTML = '<div style="color:#ef4444;padding:20px;text-align:center">图表渲染失败: '+e.message+'</div>'; }
+    },
+
+    // ======================== System Monitor ========================
+    async loadSystemMonitor() {
+      try {
+        const res = await this.api('/api/system/dashboard');
+        if (res.code === '0000') this.sysMonitor = res.data;
+      } catch(e) { console.error('System monitor error:', e); }
+    },
+
+    // ======================== Statistics ========================
+    async loadStatistics() {
+      try {
+        if (this.statsPointId) {
+          const res = await this.api('/api/alerts/stats/' + this.statsPointId + '?days=7');
+          if (res.code === '0000') {
+            // Transform: { total, confirmed, failed, confirmRate } -> unified format
+            const d = res.data;
+            this.alertStats = {
+              total: d.total, confirmed: d.confirmed, failed: d.failed,
+              confirmRate: d.confirmRate,
+              levelDistribution: { 1:0, 2:0, 3:0 } // single point stats don't have level dist
+            };
+          }
+        } else {
+          // All points combined via statistics endpoint
+          const pts = this.monitoringPoints;
+          if (pts.length === 0) return;
+          const end = new Date().toISOString();
+          const start = new Date(Date.now() - 7*86400000).toISOString();
+          const res = await this.api('/api/alerts/statistics', {
+            method:'POST',
+            body: JSON.stringify({
+              pointIds: pts.map(p => p.id),
+              startTime: start.substring(0,19),
+              endTime: end.substring(0,19)
+            })
+          });
+          if (res.code === '0000') {
+            const d = res.data;
+            let total = 0;
+            const ld = d.levelDistribution || d.levelCounts || {};
+            for (const v of Object.values(ld)) total += (typeof v === 'number' ? v : 0);
+            this.alertStats = {
+              total: total,
+              confirmed: d.confirmedCount || d.confirmed || 0,
+              failed: d.failedCount || d.failed || 0,
+              confirmRate: total > 0 ? Math.round((d.confirmedCount||d.confirmed||0) / total * 10000) / 100 : 0,
+              levelDistribution: ld
+            };
+          }
+        }
+      } catch(e) { console.error('Stats load error:', e); }
+    },
+
+    // ======================== WebSocket ========================
+    connectWebSocket() {
+      if (!this.token) return;
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = proto + '//' + location.host + '/ws/alerts?token=' + this.token;
+      try {
+        const ws = new WebSocket(url);
+        this._ws = ws;
+        ws.onopen = () => { this.wsConnected = true; if (this.wsReconnectTimer) clearTimeout(this.wsReconnectTimer); };
+        ws.onclose = () => {
+          this.wsConnected = false;
+          if (this.token) { this.wsReconnectTimer = setTimeout(() => this.connectWebSocket(), 5000); }
+        };
+        ws.onerror = () => { this.wsConnected = false; };
+        ws.onmessage = (evt) => {
+          try {
+            const msg = JSON.parse(evt.data);
+            this.showToast(msg);
+            if (this.currentPage === 'alerts') this.loadAlerts();
+            if (this.currentPage === 'dashboard') this.updateDashboardAlertCount();
+          } catch(e) {}
+        };
+      } catch(e) { this.wsConnected = false; }
+    },
+
+    updateDashboardAlertCount() {
+      this.dashboard.alertTotal = (this.dashboard.alertTotal || 0) + 1;
+    },
+
+    showToast(msg) {
+      const level = msg.alertLevel || 0;
+      const cls = level >= 3 ? 'severe' : level >= 2 ? 'moderate' : 'mild';
+      const toast = {
+        id: ++this.toastId,
+        title: '[' + this.alertText(level) + '告警] ' + (msg.pointName || msg.pointId || ''),
+        msg: msg.alertMessage || msg.details || JSON.stringify(msg),
+        time: new Date().toLocaleTimeString('zh-CN', { hour12:false }),
+        cls: cls
+      };
+      this.alertToasts.push(toast);
+      setTimeout(() => {
+        const i = this.alertToasts.findIndex(t => t.id === toast.id);
+        if (i >= 0) this.alertToasts.splice(i, 1);
+      }, 6000);
+    },
+
+    // ======================== Helpers ========================
+    getPointName(id) {
+      const p = this.monitoringPoints.find(p => p.id == id);
+      return p ? p.name : ('P-' + id);
+    },
+    alertClass(level) {
+      if (level >= 3) return 'danger';
+      if (level >= 2) return 'warning';
+      if (level >= 1) return 'info';
+      return 'success';
+    },
+    alertText(level) {
+      if (level >= 3) return '重度';
+      if (level >= 2) return '中度';
+      if (level >= 1) return '轻度';
+      return '正常';
+    },
+    fmtTime(t) {
+      if (!t) return '-';
+      const d = new Date(t);
+      return d.toLocaleDateString('zh-CN') + ' ' + d.toLocaleTimeString('zh-CN', { hour12:false });
+    }
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

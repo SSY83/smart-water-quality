@@ -10,9 +10,11 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class DataCollectionService {
@@ -73,22 +75,38 @@ public class DataCollectionService {
     }
 
     public void batchInsert(List<WaterQualityData> dataList) {
-        for (WaterQualityData data : dataList) {
-            waterQualityDataMapper.insert(data);
-        }
+        if (dataList == null || dataList.isEmpty()) return;
+        waterQualityDataMapper.batchInsert(dataList);
     }
 
     private void startWriteWorker() {
         dbWriteExecutor.execute(() -> {
+            List<WaterQualityData> batch = new ArrayList<>(100);
+            long lastFlush = System.currentTimeMillis();
             while (!Thread.currentThread().isInterrupted()) {
                 try {
-                    WaterQualityData data = writeQueue.take();
-                    waterQualityDataMapper.insert(data);
+                    WaterQualityData data = writeQueue.poll(200, TimeUnit.MILLISECONDS);
+                    if (data != null) {
+                        batch.add(data);
+                    }
+                    if (batch.size() >= 50 ||
+                        (!batch.isEmpty() && System.currentTimeMillis() - lastFlush > 200)) {
+                        waterQualityDataMapper.batchInsert(batch);
+                        batch.clear();
+                        lastFlush = System.currentTimeMillis();
+                    }
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;
                 } catch (Exception e) {
-                    log.error("数据写入失败", e);
+                    log.error("数据批量写入失败", e);
+                }
+            }
+            if (!batch.isEmpty()) {
+                try {
+                    waterQualityDataMapper.batchInsert(batch);
+                } catch (Exception e) {
+                    log.error("关闭时数据写入失败", e);
                 }
             }
         });

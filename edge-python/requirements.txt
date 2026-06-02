@@ -5,5 +5,7 @@ pyyaml>=6.0
 pyserial>=3.5
 minimalmodbus>=2.0
 protobuf>=3.20.0
+grpcio>=1.56.0
+grpcio-tools>=1.56.0
 msgpack>=1.0.5
 Pillow>=10.0.0

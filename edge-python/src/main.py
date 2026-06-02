@@ -17,6 +17,7 @@ from .water_quality_analyzer import WaterQualityAnalyzer
 from .data_cache import DataCache
 from .mqtt_client import MqttClient
 from .alert_push import AlertPusher
+from .grpc_client import GrpcClient
 
 
 def setup_logging(config: dict) -> None:
@@ -98,6 +99,15 @@ class EdgeApplication:
 
         self.alert_pusher = AlertPusher(self.point_id, self.point_name)
 
+        # gRPC client (complements MQTT for high-priority alerts)
+        grpc_cfg = self.config.get('grpc', {})
+        self.grpc_client = GrpcClient(
+            server_host=grpc_cfg.get('host', 'localhost'),
+            server_port=grpc_cfg.get('port', 9090),
+            point_id=self.point_id,
+            device_id=self.point_id
+        )
+
         # 注册回调
         self._register_callbacks()
 
@@ -114,19 +124,26 @@ class EdgeApplication:
         # 告警推送 -> MQTT发送
         self.alert_pusher.register_push_callback(self._send_alert_via_mqtt)
 
+        # MQTT重连 -> 立即触发断点续传
+        self.mqtt_client.set_reconnect_callback(self._upload_cached_data)
+
         # 采集数据 -> 分析流水线
         # (在主循环中手动调用以精确控制流程)
 
     def start(self) -> None:
         """启动边缘端应用"""
         self.logger.info("=" * 50)
-        self.logger.info("智慧水利水质监测系统 边缘端 v2.0.0 启动中...")
+        self.logger.info("智慧水利水质监测系统 边缘端 v2.1.0 启动中...")
         self.logger.info("监测点: %s (%s)", self.point_id, self.point_name)
         self.logger.info("=" * 50)
 
         # 1. 连接MQTT
         if not self.mqtt_client.connect():
             self.logger.warning("MQTT连接失败，将在本地缓存数据")
+
+        # 1.5 连接gRPC (complements MQTT, non-blocking)
+        if not self.grpc_client.connect():
+            self.logger.warning("gRPC连接失败，高优先级告警将回退至MQTT")
 
         # 2. 加载模型
         model_cfg = self.config.get('model', {})
@@ -148,6 +165,7 @@ class EdgeApplication:
 
         # 5. 启动主循环
         self._running = True
+        self._last_model_check = 0
         self._main_loop()
 
     def stop(self) -> None:
@@ -165,6 +183,7 @@ class EdgeApplication:
 
         # 发送离线通知
         self.mqtt_client.disconnect()
+        self.grpc_client.disconnect()
 
         # 关闭分析器
         self.analyzer.shutdown()
@@ -211,13 +230,22 @@ class EdgeApplication:
                     fusion_result
                 )
 
-                # 7. 正常数据仅本地记录
-                if not alert.is_alert():
-                    continue
+                # 6b. 高优先级告警通过gRPC发送（需ACK确认，alert_level >= 2）
+                if alert.is_alert() and fusion_result.alert_level >= 2:
+                    grpc_ack = self.grpc_client.report_alert(
+                        alert_level=alert.alert_level,
+                        alert_type=getattr(alert, 'alert_type', 'combined'),
+                        final_score=fusion_result.final_score,
+                        confidence=fusion_result.confidence,
+                        alert_message=f"[{self.point_name}] Water quality alert",
+                    )
+                    if grpc_ack:
+                        self.logger.info("gRPC告警已ACK: alert_id=%s", grpc_ack.alert_id)
+                    else:
+                        self.logger.warning("gRPC告警未ACK，已通过MQTT兜底")
 
-                # 8. 推送到云端
+                # 7. 推送数据到云端（告警数据 + 正常传感器数据均上传）
                 if self.mqtt_client.is_connected():
-                    # 上传分析结果
                     upload_data = {
                         'pointId': self.point_id,
                         'timestamp': analysis_result['timestamp'].isoformat(),
@@ -230,12 +258,13 @@ class EdgeApplication:
                         'sensorScore': fusion_result.sensor_score,
                         'details': sensor_data
                     }
-                    success = self.mqtt_client.publish_image_analysis(upload_data)
+                    if alert.is_alert():
+                        success = self.mqtt_client.publish_image_analysis(upload_data)
+                    else:
+                        success = self.mqtt_client.publish_sensor_data(upload_data)
                     if not success:
-                        # 上传失败，缓存到本地
                         self.data_cache.save_to_cache(upload_data)
                 else:
-                    # 网络断开，缓存到本地
                     self.data_cache.save_to_cache({
                         'point_id': self.point_id,
                         'timestamp': analysis_result['timestamp'].isoformat(),
@@ -259,6 +288,18 @@ class EdgeApplication:
                     # 网络恢复时补传
                     if self.mqtt_client.is_connected():
                         self._upload_cached_data()
+
+                # 定期检查模型版本（每30分钟）
+                if now - self._last_model_check > 1800:
+                    model_cfg = self.config.get('model', {})
+                    model_info = self.grpc_client.get_model_version(
+                        current_mobilenet_ver=model_cfg.get('version', '1.0.0'),
+                        current_unet_ver=model_cfg.get('unet_version', '1.0.0')
+                    )
+                    if model_info and model_info.get('mobilenet_update_available'):
+                        self.logger.info("模型更新可用: %s",
+                                         model_info.get('latest_mobilenet_version'))
+                    self._last_model_check = now
 
             except Exception as e:
                 self.logger.error("主循环异常: %s", e, exc_info=True)
@@ -287,9 +328,22 @@ class EdgeApplication:
     def _upload_cached_data(self) -> None:
         """上传本地缓存数据（断点续传）"""
         try:
-            count = self.data_cache.upload_cached_data(
-                lambda record: self.mqtt_client.publish_image_analysis(record)
-            )
+            def upload_with_camel_mapping(record):
+                """SQLite snake_case → MQTT camelCase 键名映射"""
+                mapped = {
+                    'pointId': record.get('point_id', self.point_id),
+                    'timestamp': record.get('timestamp', ''),
+                    'alertLevel': record.get('alert_level', 0),
+                    'turbidityLevel': record.get('turbidity_level', 0),
+                    'pollutionTypes': record.get('pollution_types', ''),
+                    'confidence': record.get('confidence', 0.0),
+                    'finalScore': record.get('final_score', 0.0),
+                    'imageScore': record.get('image_score', 0.0),
+                    'sensorScore': record.get('sensor_score', 0.0),
+                    'details': record.get('details', '{}'),
+                }
+                return self.mqtt_client.publish_image_analysis(mapped)
+            count = self.data_cache.upload_cached_data(upload_with_camel_mapping)
             if count > 0:
                 self.logger.info("缓存补传完成: %d条", count)
         except Exception as e:

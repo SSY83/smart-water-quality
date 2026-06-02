@@ -27,4 +27,8 @@ public enum AlertLevel {
     public static String getDescriptionByCode(int code) {
         return fromCode(code).getDescription();
     }
+
+    public static String nameOf(int code) {
+        return fromCode(code).getDescription();
+    }
 }

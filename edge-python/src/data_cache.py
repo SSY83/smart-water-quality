@@ -89,6 +89,10 @@ class DataCache:
                 CREATE INDEX IF NOT EXISTS idx_alert_uploaded
                 ON alert_record(uploaded)
             """)
+            self._db_conn.execute("""
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_wq_point_timestamp
+                ON water_quality_data(point_id, timestamp)
+            """)
             self._db_conn.commit()
         logger.info("本地缓存已初始化: dir=%s, max=%dMB", self.cache_dir, self.max_cache_size_mb)
 
@@ -160,16 +164,23 @@ class DataCache:
         """网络恢复后批量上传缓存数据（按时间戳升序）"""
         records = self.get_unuploaded_records("water_quality_data", 50)
         uploaded_count = 0
+        consecutive_failures = 0
+        max_consecutive_failures = 5
         for record in records:
             try:
                 if upload_func(record):
                     self.mark_uploaded("water_quality_data", record['id'])
                     uploaded_count += 1
+                    consecutive_failures = 0
                 else:
                     logger.warning("上传失败，跳过: id=%s", record['id'])
+                    consecutive_failures += 1
             except Exception as e:
                 logger.error("上传异常: id=%s, error=%s", record['id'], e)
-                break  # 单条失败不阻塞后续，但网络异常时暂停
+                consecutive_failures += 1
+            if consecutive_failures >= max_consecutive_failures:
+                logger.warning("连续%d次上传失败，暂停补传", consecutive_failures)
+                break
 
         return uploaded_count
 
@@ -247,7 +258,7 @@ class DataCache:
         try:
             with self._db_lock:
                 self._db_conn.execute("""
-                    INSERT INTO water_quality_data
+                    INSERT OR IGNORE INTO water_quality_data
                     (point_id, timestamp, turbidity_level, turbidity_ntu,
                      cod_value, ph_value, alert_level, confidence,
                      final_score, image_score, sensor_score, details)

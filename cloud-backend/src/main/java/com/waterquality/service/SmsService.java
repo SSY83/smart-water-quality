@@ -1,22 +1,19 @@
 package com.waterquality.service;
 
-import cn.hutool.http.HttpRequest;
-import cn.hutool.http.HttpResponse;
-import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
 import com.waterquality.entity.AlertRecord;
 import com.waterquality.entity.MonitoringPoint;
+import com.waterquality.entity.User;
 import com.waterquality.mapper.AlertRecordMapper;
 import com.waterquality.mapper.MonitoringPointMapper;
+import com.waterquality.mapper.UserMapper;
+import com.waterquality.service.sms.SmsProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
@@ -24,20 +21,8 @@ public class SmsService {
 
     private static final Logger log = LoggerFactory.getLogger(SmsService.class);
 
-    @Value("${sms.api-url}")
-    private String smsApiUrl;
-
-    @Value("${sms.api-key}")
-    private String smsApiKey;
-
     @Value("${sms.retry-max:3}")
     private int maxRetry;
-
-    @Value("${sms.connect-timeout:3}")
-    private int connectTimeout;
-
-    @Value("${sms.read-timeout:5}")
-    private int readTimeout;
 
     @Value("${sms.circuit-breaker.failure-threshold:5}")
     private int failureThreshold;
@@ -47,17 +32,21 @@ public class SmsService {
 
     private final AlertRecordMapper alertRecordMapper;
     private final MonitoringPointMapper monitoringPointMapper;
+    private final UserMapper userMapper;
+    private final SmsProvider smsProvider;
 
     private final AtomicInteger failureCount = new AtomicInteger(0);
     private volatile long circuitOpenTime = 0;
     private volatile boolean circuitOpen = false;
 
-    private final Map<String, String> smsContentCache = new ConcurrentHashMap<>();
-
     public SmsService(AlertRecordMapper alertRecordMapper,
-                      MonitoringPointMapper monitoringPointMapper) {
+                      MonitoringPointMapper monitoringPointMapper,
+                      UserMapper userMapper,
+                      SmsProvider smsProvider) {
         this.alertRecordMapper = alertRecordMapper;
         this.monitoringPointMapper = monitoringPointMapper;
+        this.userMapper = userMapper;
+        this.smsProvider = smsProvider;
     }
 
     /**
@@ -76,36 +65,35 @@ public class SmsService {
         MonitoringPoint point = monitoringPointMapper.selectById(record.getPointId());
         String pointName = point != null ? point.getName() : "未知监测点";
 
+        String phone = getReceiverPhone(record, point);
+        if (phone == null || phone.isEmpty()) {
+            log.warn("无法获取告警接收手机号: alertId={}", alertId);
+            return false;
+        }
+
         String content = buildSmsContent(alertId, pointName, record);
         if (content == null) return false;
 
+        if ("mock".equals(smsProvider.getName())) {
+            log.info("[MockSMS] 收件人={}, 内容={}", phone, content);
+            failureCount.set(0);
+            return true;
+        }
+
+        return sendViaProvider(phone, content, record);
+    }
+
+    private boolean sendViaProvider(String phone, String content, AlertRecord record) {
         int retries = 0;
         while (retries < maxRetry) {
             try {
-                JSONObject body = new JSONObject();
-                body.set("mobile", getReceiverPhone(record));
-                body.set("content", content);
-                body.set("sign", "水质监测");
-
-                HttpResponse response = HttpRequest.post(smsApiUrl)
-                        .header("Content-Type", "application/json")
-                        .header("Authorization", "Bearer " + smsApiKey)
-                        .body(body.toString())
-                        .timeout(readTimeout * 1000)
-                        .setConnectionTimeout(connectTimeout * 1000)
-                        .execute();
-
-                if (response.isOk()) {
-                    JSONObject respJson = JSONUtil.parseObj(response.body());
-                    if ("SUCCESS".equals(respJson.getStr("code"))) {
-                        failureCount.set(0);
-                        return true;
-                    } else {
-                        log.warn("短信API返回失败: {}", respJson.getStr("message"));
-                    }
+                boolean success = smsProvider.send(phone, content, "水质监测");
+                if (success) {
+                    failureCount.set(0);
+                    return true;
                 }
             } catch (Exception e) {
-                log.error("短信发送异常: alertId={}, retry={}", alertId, retries, e);
+                log.error("短信发送异常: alertId={}, retry={}", record.getId(), retries, e);
             }
 
             retries++;
@@ -132,8 +120,18 @@ public class SmsService {
                 pointName, levelDesc, alertId);
     }
 
-    private String getReceiverPhone(AlertRecord record) {
-        // 从监测点配置中获取负责人手机号
+    private String getReceiverPhone(AlertRecord record, MonitoringPoint point) {
+        // 1. 优先从监测点获取联系人手机号
+        if (point != null && point.getContactPhone() != null
+                && !point.getContactPhone().isEmpty()) {
+            return point.getContactPhone();
+        }
+        // 2. 回退到查询管理员手机号
+        List<User> admins = userMapper.selectByRole("admin");
+        if (admins != null && !admins.isEmpty() && admins.get(0).getPhone() != null) {
+            return admins.get(0).getPhone();
+        }
+        // 3. 默认号码（生产环境需替换）
         return "13800000000";
     }
 

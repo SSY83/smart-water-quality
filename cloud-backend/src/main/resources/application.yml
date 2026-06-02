@@ -4,6 +4,14 @@ server:
     encoding:
       charset: UTF-8
       enabled: true
+  ssl:
+    enabled: ${SSL_ENABLED:false}
+    key-store: ${SSL_KEY_STORE:classpath:keystore.p12}
+    key-store-password: ${SSL_KEY_STORE_PASSWORD:changeit}
+    key-store-type: PKCS12
+    key-alias: ${SSL_KEY_ALIAS:waterquality}
+  http2:
+    enabled: ${HTTP2_ENABLED:true}
 
 spring:
   application:
@@ -17,11 +25,27 @@ spring:
     password: ${DB_PASSWORD:root}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
-      connection-timeout: 30000
-      idle-timeout: 600000
-      max-lifetime: 1800000
+      maximum-pool-size: 30
+      minimum-idle: 10
+      connection-timeout: 5000
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      leak-detection-threshold: 10000
+      pool-name: WaterQualityHikariPool
+      validation-timeout: 3000
+    read:
+      enabled: ${DB_READ_ENABLED:false}
+      url: jdbc:mysql://${DB_READ_HOST:localhost}:${DB_READ_PORT:3306}/smart_water_quality?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      username: ${DB_READ_USERNAME:root}
+      password: ${DB_READ_PASSWORD:root}
+      driver-class-name: com.mysql.cj.jdbc.Driver
+      hikari:
+        maximum-pool-size: 20
+        minimum-idle: 5
+        connection-timeout: 5000
+        idle-timeout: 300000
+        max-lifetime: 1200000
+        pool-name: WaterQualityReadHikariPool
 
   redis:
     host: ${REDIS_HOST:localhost}
@@ -61,6 +85,7 @@ mqtt:
   topics:
     - /wqi/+/sensor_data
     - /wqi/+/image_analysis
+    - /wqi/+/heartbeat
   connection-timeout: 10
   keep-alive-interval: 30
 
@@ -74,6 +99,7 @@ jwt:
   refresh-threshold: 1800000
 
 sms:
+  provider: ${SMS_PROVIDER:mock}
   api-url: https://api.smsprovider.com/v2/send
   api-key: ${SMS_API_KEY:}
   retry-max: 3
@@ -84,6 +110,12 @@ sms:
     failure-threshold: 5
     open-duration: 600
     half-open-max-requests: 1
+  aliyun:
+    access-key-id: ${SMS_ACCESS_KEY_ID:}
+    access-key-secret: ${SMS_ACCESS_KEY_SECRET:}
+    sign-name: ${SMS_SIGN_NAME:水质监测}
+    template-code: ${SMS_TEMPLATE_CODE:SMS_123456789}
+    region-id: cn-hangzhou
 
 fusion:
   image-weight: 0.6
@@ -112,11 +144,35 @@ alert:
       min: 6.5
       max: 8.5
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,env,loggers,threaddump
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      simple:
+        enabled: true
+  info:
+    app:
+      name: ${spring.application.name}
+      version: 2.1.0
+
 logging:
+  config: classpath:logback-spring.xml
   level:
     root: INFO
     com.waterquality: DEBUG
-  file:
-    path: logs
-    max-size: 100MB
-    max-history: 30
+
+grpc:
+  server:
+    port: ${GRPC_PORT:9090}
+    enabled: ${GRPC_ENABLED:true}
+    max-inbound-message-size: 10485760
+  client:
+    keepalive-time-sec: 30
+    keepalive-timeout-sec: 10

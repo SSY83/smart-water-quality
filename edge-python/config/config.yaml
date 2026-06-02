@@ -35,6 +35,8 @@ model:
   input_size: [224, 224]
   num_threads: 4  # TensorFlow Lite推理线程数
   confidence_threshold: 0.5
+  version: "1.0.0"
+  unet_version: "1.0.0"
 
 fusion:
   image_weight: 0.6
@@ -57,6 +59,15 @@ mqtt:
   topic_sensor: "/wqi/{point_id}/sensor_data"
   keepalive: 30
   reconnect_interval: 10
+
+grpc:
+  host: "localhost"
+  port: 9090
+  enabled: true
+  connect_timeout: 5.0
+  rpc_timeout: 10.0
+  keepalive_time_ms: 30000
+  keepalive_timeout_ms: 10000
 
 cache:
   db_path: "data/local_cache.db"

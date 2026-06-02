@@ -17,6 +17,7 @@ public class MonitoringPoint extends BaseEntity {
     private Integer status;
     private LocalDateTime lastOnlineTime;
     private String locationDesc;
+    private String contactPhone;
 
     public boolean isOnline() {
         if (lastOnlineTime == null) {

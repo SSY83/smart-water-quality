@@ -14,9 +14,12 @@ import javax.servlet.http.HttpServletResponse;
 public class JwtAuthenticationFilter implements HandlerInterceptor {
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final JwtBlacklist jwtBlacklist;
 
-    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider) {
+    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider,
+                                    JwtBlacklist jwtBlacklist) {
         this.jwtTokenProvider = jwtTokenProvider;
+        this.jwtBlacklist = jwtBlacklist;
     }
 
     @Override
@@ -33,6 +36,10 @@ public class JwtAuthenticationFilter implements HandlerInterceptor {
         }
 
         String token = authHeader.substring(7);
+        if (jwtBlacklist.isBlacklisted(token)) {
+            sendErrorResponse(response, HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED);
+            return false;
+        }
         if (!jwtTokenProvider.validateToken(token)) {
             sendErrorResponse(response, HttpStatus.UNAUTHORIZED, ErrorCode.UNAUTHORIZED);
             return false;

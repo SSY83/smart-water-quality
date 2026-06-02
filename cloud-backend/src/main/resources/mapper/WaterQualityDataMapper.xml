@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.waterquality.mapper.WaterQualityDataMapper">
+
+    <select id="selectAggregationByPoints" resultType="java.util.Map">
+        SELECT point_id AS "point_id", AVG(turbidity_ntu) AS "avg_turbidity",
+               AVG(cod_value) AS "avg_cod", AVG(ph_value) AS "avg_ph",
+               AVG(alert_level) AS "avg_alert", COUNT(*) AS "cnt"
+        FROM water_quality_data
+        WHERE point_id IN
+        <foreach collection="pointIds" item="pid" separator="," open="(" close=")">
+            #{pid}
+        </foreach>
+        AND timestamp BETWEEN #{start} AND #{end}
+        GROUP BY point_id
+    </select>
+
+</mapper>

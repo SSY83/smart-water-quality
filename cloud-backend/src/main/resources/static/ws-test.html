@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket 告警推送测试</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1 { color: #00d4ff; margin-bottom: 10px; }
+        .status-bar { display: flex; gap: 15px; margin: 15px 0; }
+        .status-dot { width: 12px; height: 12px; border-radius: 50%; background: #666; display: inline-block; }
+        .status-dot.connected { background: #0f0; box-shadow: 0 0 8px #0f0; }
+        .status-dot.disconnected { background: #f00; box-shadow: 0 0 8px #f00; }
+        .panel { background: #16213e; border-radius: 8px; padding: 20px; margin: 15px 0; }
+        .panel h2 { color: #00d4ff; font-size: 1.1em; margin-bottom: 12px; }
+        .form-row { display: flex; gap: 10px; margin: 10px 0; flex-wrap: wrap; align-items: center; }
+        input, button { padding: 8px 14px; border-radius: 4px; border: 1px solid #333; background: #0f3460; color: #eee; font-size: 14px; }
+        button { cursor: pointer; background: #00d4ff; color: #1a1a2e; font-weight: bold; border: none; }
+        button:hover { opacity: 0.85; }
+        button.disconnect { background: #e94560; }
+        .log-container { background: #0f3460; border-radius: 4px; padding: 12px; height: 300px; overflow-y: auto; font-family: 'Consolas', monospace; font-size: 13px; }
+        .log-entry { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .log-entry.alert { color: #ff6b6b; }
+        .log-entry.ping { color: #51cf66; }
+        .log-entry.info { color: #339af0; }
+        .log-entry.error { color: #ff6b6b; background: rgba(255,0,0,0.1); padding: 4px 8px; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+        .stat-card { background: #0f3460; padding: 12px; border-radius: 6px; text-align: center; }
+        .stat-card .label { font-size: 12px; color: #888; }
+        .stat-card .value { font-size: 24px; color: #00d4ff; font-weight: bold; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>WebSocket 告警推送测试</h1>
+    <p style="color:#888">端点: ws://localhost:8080/ws/alerts | 子协议: Bearer JWT</p>
+
+    <div class="status-bar">
+        <span>状态: <span class="status-dot disconnected" id="statusDot"></span>
+        <strong id="statusText">未连接</strong></span>
+        <span>连接时长: <strong id="uptime">--</strong></span>
+    </div>
+
+    <div class="panel">
+        <h2>连接配置</h2>
+        <div class="form-row">
+            <input type="text" id="wsUrl" value="ws://localhost:8080/ws/alerts" placeholder="WebSocket URL" style="width:300px">
+            <input type="text" id="jwtToken" placeholder="粘贴JWT Token (登录后获取)" style="width:350px">
+            <button onclick="connect()" id="btnConnect">连接</button>
+            <button onclick="disconnect()" class="disconnect" id="btnDisconnect" disabled>断开</button>
+        </div>
+        <small style="color:#888">先通过 POST /api/auth/login 获取JWT Token</small>
+    </div>
+
+    <div class="panel">
+        <h2>统计</h2>
+        <div class="stats">
+            <div class="stat-card"><div class="label">收到消息</div><div class="value" id="msgCount">0</div></div>
+            <div class="stat-card"><div class="label">告警消息</div><div class="value" id="alertCount">0</div></div>
+            <div class="stat-card"><div class="label">心跳次数</div><div class="value" id="pingCount">0</div></div>
+            <div class="stat-card"><div class="label">最后消息</div><div class="value" id="lastMsgTime" style="font-size:14px;">--</div></div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>消息日志 <button onclick="clearLog()" style="float:right;font-size:12px">清空</button></h2>
+        <div class="log-container" id="logContainer"></div>
+    </div>
+</div>
+
+<script>
+    let ws = null;
+    let pingTimer = null;
+    let connectTime = null;
+    let stats = { msgCount: 0, alertCount: 0, pingCount: 0 };
+
+    function connect() {
+        const url = document.getElementById('wsUrl').value;
+        const token = document.getElementById('jwtToken').value.trim();
+        if (!token) { log('请先输入JWT Token', 'error'); return; }
+
+        try {
+            const wsUrl = url + '?token=' + encodeURIComponent(token);
+            ws = new WebSocket(wsUrl);
+            ws.onopen = onOpen;
+            ws.onmessage = onMessage;
+            ws.onclose = onClose;
+            ws.onerror = onError;
+        } catch(e) {
+            log('连接失败: ' + e.message, 'error');
+        }
+    }
+
+    function disconnect() {
+        if (ws) ws.close(1000, '用户主动断开');
+        stopHeartbeat();
+    }
+
+    function onOpen() {
+        connectTime = Date.now();
+        document.getElementById('statusDot').className = 'status-dot connected';
+        document.getElementById('statusText').textContent = '已连接';
+        document.getElementById('btnConnect').disabled = true;
+        document.getElementById('btnDisconnect').disabled = false;
+        log('WebSocket连接已建立', 'info');
+        startHeartbeat();
+        startUptimeTimer();
+    }
+
+    function onMessage(event) {
+        stats.msgCount++;
+        document.getElementById('msgCount').textContent = stats.msgCount;
+        document.getElementById('lastMsgTime').textContent = new Date().toLocaleTimeString();
+
+        if (event.data === 'pong') {
+            stats.pingCount++;
+            document.getElementById('pingCount').textContent = stats.pingCount;
+            log('收到心跳响应: pong', 'ping');
+            return;
+        }
+
+        try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'alert') {
+                stats.alertCount++;
+                document.getElementById('alertCount').textContent = stats.alertCount;
+                log(`告警! 监测点:${data.data.pointName} 等级:${data.data.level} 类型:${data.data.type}`, 'alert');
+            } else {
+                log(JSON.stringify(data), 'info');
+            }
+        } catch(e) {
+            log(event.data, 'info');
+        }
+    }
+
+    function onClose(event) {
+        document.getElementById('statusDot').className = 'status-dot disconnected';
+        document.getElementById('statusText').textContent = '已断开 (code:' + event.code + ')';
+        document.getElementById('btnConnect').disabled = false;
+        document.getElementById('btnDisconnect').disabled = true;
+        stopHeartbeat();
+        log(`连接关闭: code=${event.code} reason=${event.reason || 'none'}`, 'info');
+    }
+
+    function onError(event) {
+        log('WebSocket错误', 'error');
+    }
+
+    function startHeartbeat() {
+        pingTimer = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send('ping');
+            }
+        }, 25000); // 25秒发一次心跳
+    }
+
+    function stopHeartbeat() {
+        if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
+    }
+
+    function startUptimeTimer() {
+        setInterval(() => {
+            if (connectTime && ws && ws.readyState === WebSocket.OPEN) {
+                const seconds = Math.floor((Date.now() - connectTime) / 1000);
+                const h = Math.floor(seconds / 3600);
+                const m = Math.floor((seconds % 3600) / 60);
+                const s = seconds % 60;
+                document.getElementById('uptime').textContent =
+                    `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+            }
+        }, 1000);
+    }
+
+    function log(msg, type) {
+        const container = document.getElementById('logContainer');
+        const entry = document.createElement('div');
+        entry.className = 'log-entry ' + (type || 'info');
+        entry.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+        container.appendChild(entry);
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function clearLog() {
+        document.getElementById('logContainer').innerHTML = '';
+    }
+
+    // 页面关闭时清理
+    window.addEventListener('beforeunload', () => {
+        if (ws) ws.close();
+    });
+</script>
+</body>
+</html>

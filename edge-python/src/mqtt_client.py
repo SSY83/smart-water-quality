@@ -32,6 +32,7 @@ class MqttClient:
         self._reconnect_thread: Optional[threading.Thread] = None
         self._last_heartbeat_response = time.time()
         self._message_callbacks: list = []
+        self._reconnect_callbacks: list = []
 
         # 主题模板
         self.image_topic = f"/wqi/{point_id}/image_analysis"
@@ -97,6 +98,10 @@ class MqttClient:
         """注册消息回调"""
         self._message_callbacks.append(callback)
 
+    def set_reconnect_callback(self, callback: Callable) -> None:
+        """注册重连成功回调（用于立即触发断点续传）"""
+        self._reconnect_callbacks.append(callback)
+
     def is_connected(self) -> bool:
         return self._connected
 
@@ -124,6 +129,12 @@ class MqttClient:
             logger.info("MQTT Broker连接成功")
             # 订阅下行主题（云端命令）
             client.subscribe(f"/wqi/{self.point_id}/command", qos=self.qos)
+            # 重连成功回调 — 立即触发断点续传
+            for cb in self._reconnect_callbacks:
+                try:
+                    cb()
+                except Exception as e:
+                    logger.error("重连回调执行异常: %s", e)
         else:
             logger.error("MQTT连接失败: rc=%d", rc)
             self._connected = False
@@ -162,6 +173,12 @@ class MqttClient:
                 logger.info("尝试重连MQTT...")
                 if self._client:
                     self._client.reconnect()
+                    # 重连成功回调 — 立即触发断点续传
+                    for cb in self._reconnect_callbacks:
+                        try:
+                            cb()
+                        except Exception as e:
+                            logger.error("重连回调执行异常: %s", e)
                     break
             except Exception as e:
                 logger.warning("MQTT重连失败: %s", e)

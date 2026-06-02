@@ -1,0 +1,53 @@
+# ===================================================
+# Filebeat 配置 — 水质监测系统日志采集
+# 收集结构化JSON日志发送至 Elasticsearch
+# 使用: filebeat -c filebeat.yml
+# ===================================================
+
+filebeat.inputs:
+  - type: log
+    enabled: true
+    paths:
+      - logs/application*.log
+    json.keys_under_root: true
+    json.overwrite_keys: true
+    json.add_error_key: true
+    fields:
+      app: smart-water-quality
+      env: ${SPRING_PROFILES_ACTIVE:dev}
+    fields_under_root: true
+    multiline:
+      pattern: '^\{"timestamp"'
+      negate: true
+      match: after
+
+  - type: log
+    enabled: true
+    paths:
+      - logs/error*.log
+    json.keys_under_root: true
+    json.overwrite_keys: true
+    json.add_error_key: true
+    fields:
+      app: smart-water-quality
+      level: ERROR
+    fields_under_root: true
+
+# ======================== Elasticsearch Output ========================
+output.elasticsearch:
+  hosts: ["${ELASTICSEARCH_HOST:localhost}:${ELASTICSEARCH_PORT:9200}"]
+  username: "${ELASTICSEARCH_USERNAME:elastic}"
+  password: "${ELASTICSEARCH_PASSWORD:changeme}"
+  index: "water-quality-%{+yyyy.MM.dd}"
+  worker: 2
+  bulk_max_size: 200
+  timeout: 90
+  ssl.verification_mode: none
+
+# ======================== Logging ========================
+logging.level: info
+logging.to_files: true
+logging.files:
+  path: logs/filebeat
+  name: filebeat.log
+  keepfiles: 7

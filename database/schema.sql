@@ -40,6 +40,7 @@ CREATE TABLE monitoring_point (
     status TINYINT NOT NULL DEFAULT 0 COMMENT '状态: 0-离线, 1-在线',
     last_online_time DATETIME NULL COMMENT '最后在线时间',
     location_desc VARCHAR(200) NULL COMMENT '地理位置描述',
+    contact_phone VARCHAR(20) NULL COMMENT '联系人手机号',
     create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE INDEX uk_device_id (device_id),
@@ -194,7 +195,7 @@ INSERT INTO sys_config (config_key, config_value, description) VALUES
 -- 10. 预置管理员用户 (密码: admin123, BCrypt加密)
 -- ============================================================
 INSERT INTO sys_user (username, password, phone, role, status) VALUES
-('admin', '$2b$10$Z2uig.gev.AkzwL09kjwCOq0uimFWaSc2fn/.LsTU8aHyecjmSabG', '13800000000', 'admin', 1);
+('admin', '$2b$10$rro5XSGE92n5DGzRG4mnhu144trOm8UTpx2oXkrg4HHQJaNWqkriW', '13800000000', 'admin', 1);
 
 -- ============================================================
 -- 11. 预置监测点数据

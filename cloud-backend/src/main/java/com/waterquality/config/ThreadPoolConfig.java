@@ -32,6 +32,8 @@ public class ThreadPoolConfig {
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("mqtt-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.DiscardOldestPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(15);
         executor.initialize();
         return executor;
     }
@@ -44,6 +46,8 @@ public class ThreadPoolConfig {
         executor.setQueueCapacity(500);
         executor.setThreadNamePrefix("db-write-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
         executor.initialize();
         return executor;
     }
@@ -56,6 +60,8 @@ public class ThreadPoolConfig {
         executor.setQueueCapacity(100);
         executor.setThreadNamePrefix("retry-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(15);
         executor.initialize();
         return executor;
     }

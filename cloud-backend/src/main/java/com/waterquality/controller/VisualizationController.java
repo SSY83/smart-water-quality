@@ -19,18 +19,12 @@ public class VisualizationController {
         this.visualizationService = visualizationService;
     }
 
-    /**
-     * 获取水质趋势曲线数据
-     */
     @PostMapping("/trend")
     public Result<List<Map<String, Object>>> getTrendData(@RequestBody QueryParams params) {
         List<Map<String, Object>> trendData = visualizationService.getTrendData(params);
         return Result.success(trendData, (long) trendData.size());
     }
 
-    /**
-     * 获取热力图数据
-     */
     @PostMapping("/heatmap")
     public Result<List<Map<String, Object>>> getHeatmapData(@RequestBody QueryParams params) {
         List<Map<String, Object>> heatmapData = visualizationService.getHeatmapData(
@@ -38,12 +32,26 @@ public class VisualizationController {
         return Result.success(heatmapData, (long) heatmapData.size());
     }
 
-    /**
-     * 分页查询水质历史数据
-     */
     @PostMapping("/query")
     public Result<List<WaterQualityData>> queryData(@RequestBody QueryParams params) {
         List<WaterQualityData> dataList = visualizationService.queryData(params);
         return Result.success(dataList, (long) dataList.size());
+    }
+
+    /**
+     * 缓存统计信息
+     */
+    @GetMapping("/cache-stats")
+    public Result<Map<String, Object>> getCacheStats() {
+        return Result.success(visualizationService.getCacheStats());
+    }
+
+    /**
+     * 缓存预热（手动触发）
+     */
+    @PostMapping("/cache-warmup")
+    public Result<Void> warmUpCache(@RequestBody List<Long> pointIds) {
+        visualizationService.warmUpCache(pointIds);
+        return Result.success(null);
     }
 }

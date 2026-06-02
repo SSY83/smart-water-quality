@@ -78,6 +78,10 @@ public class JwtTokenProvider {
         }
     }
 
+    public long getExpiration(String token) {
+        return parseToken(token).getExpiration().getTime();
+    }
+
     public boolean shouldRefresh(String token) {
         try {
             Claims claims = parseToken(token);

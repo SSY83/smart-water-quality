@@ -1,0 +1,80 @@
+# 演示模式 — 零外部依赖 (H2内存数据库 + Mock短信)
+spring:
+  datasource:
+    url: jdbc:h2:mem:smart_water_quality;DB_CLOSE_DELAY=-1;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      id-type: auto
+
+jwt:
+  secret: ZGVtby1zZWNyZXQta2V5LWZvci1zbWFydC13YXRlci1xdWFsaXR5LXN5c3RlbS0yMDI2
+  expiration: 86400000
+  refresh-threshold: 1800000
+
+sms:
+  provider: mock
+  retry-max: 3
+  circuit-breaker:
+    failure-threshold: 5
+    open-duration: 600000
+
+mqtt:
+  broker-url:
+  client-id: demo-${random.int}
+  username:
+  password:
+  qos: 1
+  topics: /wqi/+/sensor_data,/wqi/+/image_analysis,/wqi/+/heartbeat
+  connection-timeout: 10
+  keep-alive-interval: 30
+
+websocket:
+  heartbeat-interval: 30
+
+fusion:
+  image-weight: 0.6
+  sensor-weight: 0.4
+  time-window-ms: 500
+  turbidity-threshold: 80.0
+  cod-threshold: 50.0
+
+alert:
+  threshold:
+    turbidity: { mild: 5.0, moderate: 30.0, severe: 80.0 }
+    cod: { mild: 15.0, moderate: 30.0, severe: 50.0 }
+    ph: { min: 6.5, max: 8.5 }
+
+cache:
+  query-ttl: 300
+  query-ttl-random-offset: 60
+  null-value-ttl: 60
+
+grpc:
+  server:
+    port: 9090
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+logging:
+  level:
+    root: INFO
+    com.waterquality: INFO

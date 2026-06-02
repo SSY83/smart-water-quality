@@ -3,24 +3,25 @@ package com.waterquality.controller;
 import com.waterquality.dto.Result;
 import com.waterquality.entity.AlertRecord;
 import com.waterquality.mapper.AlertRecordMapper;
+import com.waterquality.service.AlertPushService;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.*;
 
 @RestController
 @RequestMapping("/api/alerts")
 public class AlertController {
 
     private final AlertRecordMapper alertRecordMapper;
+    private final AlertPushService alertPushService;
 
-    public AlertController(AlertRecordMapper alertRecordMapper) {
+    public AlertController(AlertRecordMapper alertRecordMapper,
+                           AlertPushService alertPushService) {
         this.alertRecordMapper = alertRecordMapper;
+        this.alertPushService = alertPushService;
     }
 
-    /**
-     * 查询某个监测点的历史告警
-     */
     @GetMapping("/point/{pointId}")
     public Result<List<AlertRecord>> getAlertsByPoint(
             @PathVariable Long pointId,
@@ -35,26 +36,91 @@ public class AlertController {
         return Result.success(alerts, (long) alerts.size());
     }
 
-    /**
-     * 确认告警
-     */
     @PostMapping("/{alertId}/confirm")
     public Result<Void> confirmAlert(@PathVariable Long alertId,
-                                      @RequestAttribute Long userId) {
+                                      @RequestAttribute(required = false) Long userId) {
         AlertRecord record = alertRecordMapper.selectById(alertId);
         if (record == null) {
             return Result.error("1004", "告警记录不存在");
         }
         record.setPushStatus("confirmed");
         record.setConfirmTime(LocalDateTime.now());
-        record.setConfirmedBy(userId);
+        if (userId != null) {
+            record.setConfirmedBy(userId);
+        }
         alertRecordMapper.updateById(record);
         return Result.success(null);
     }
 
     /**
-     * 查询待重试的告警
+     * 解除/关闭告警
      */
+    @PostMapping("/{alertId}/dismiss")
+    public Result<Void> dismissAlert(@PathVariable Long alertId) {
+        AlertRecord record = alertRecordMapper.selectById(alertId);
+        if (record == null) {
+            return Result.error("1004", "告警记录不存在");
+        }
+        record.setPushStatus("dismissed");
+        alertRecordMapper.updateById(record);
+        return Result.success(null);
+    }
+
+    /**
+     * 多参数联合告警规则评估
+     */
+    @GetMapping("/evaluate-combined")
+    public Result<Map<String, Object>> evaluateCombined(
+            @RequestParam double turbidity,
+            @RequestParam double cod,
+            @RequestParam double ph) {
+        int combinedLevel = alertPushService.evaluateCombinedAlert(turbidity, cod, ph);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("turbidity", turbidity);
+        result.put("cod", cod);
+        result.put("ph", ph);
+        result.put("combinedLevel", combinedLevel);
+        result.put("levelName", com.waterquality.enums.AlertLevel.nameOf(combinedLevel));
+        return Result.success(result);
+    }
+
+    /**
+     * 告警统计报表 (多点聚合)
+     */
+    @PostMapping("/statistics")
+    public Result<Map<String, Object>> alertStatistics(
+            @RequestBody Map<String, Object> request) {
+        @SuppressWarnings("unchecked")
+        List<Number> pointIdsRaw = (List<Number>) request.get("pointIds");
+        List<Long> pointIds = new ArrayList<>();
+        if (pointIdsRaw != null) {
+            for (Number n : pointIdsRaw) {
+                pointIds.add(n.longValue());
+            }
+        }
+
+        LocalDateTime start = request.containsKey("startTime") ?
+                LocalDateTime.parse(request.get("startTime").toString()) :
+                LocalDateTime.now().minusDays(7);
+        LocalDateTime end = request.containsKey("endTime") ?
+                LocalDateTime.parse(request.get("endTime").toString()) :
+                LocalDateTime.now();
+
+        Map<String, Object> stats = alertPushService.getAlertStatistics(pointIds, start, end);
+        return Result.success(stats);
+    }
+
+    /**
+     * 单监测点告警统计
+     */
+    @GetMapping("/stats/{pointId}")
+    public Result<Map<String, Object>> pointAlertStats(
+            @PathVariable Long pointId,
+            @RequestParam(defaultValue = "7") int days) {
+        Map<String, Object> stats = alertPushService.getPointAlertStats(pointId, days);
+        return Result.success(stats);
+    }
+
     @GetMapping("/pending-retry")
     public Result<List<AlertRecord>> getPendingRetry(@RequestParam(defaultValue = "50") int limit) {
         List<AlertRecord> pending = alertRecordMapper.selectPendingRetry(limit);

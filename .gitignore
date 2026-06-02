@@ -27,6 +27,7 @@ Thumbs.db
 *.png
 *.jpg
 *.csv
+*.exe
 cloud-backend/.mvn/wrapper/maven-wrapper.jar
 
 # Temp files
@@ -34,3 +35,6 @@ convert_report.py
 *.yaml
 !edge-python/config/config.yaml
 *.txt
+
+# Week3 development artifacts
+Week3/

@@ -3,6 +3,8 @@ package com.waterquality.mqtt;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.waterquality.dto.AnalysisResult;
+import com.waterquality.entity.EdgeDevice;
+import com.waterquality.mapper.EdgeDeviceMapper;
 import com.waterquality.service.IntelligentAnalysisService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,11 +21,14 @@ public class MqttMessageHandler {
     private static final Logger log = LoggerFactory.getLogger(MqttMessageHandler.class);
 
     private final IntelligentAnalysisService intelligentAnalysisService;
+    private final EdgeDeviceMapper edgeDeviceMapper;
     private final Executor mqttExecutor;
 
     public MqttMessageHandler(IntelligentAnalysisService intelligentAnalysisService,
+                               EdgeDeviceMapper edgeDeviceMapper,
                                @Qualifier("mqttExecutor") Executor mqttExecutor) {
         this.intelligentAnalysisService = intelligentAnalysisService;
+        this.edgeDeviceMapper = edgeDeviceMapper;
         this.mqttExecutor = mqttExecutor;
     }
 
@@ -46,6 +51,8 @@ public class MqttMessageHandler {
                     handleImageAnalysis(pointId, jsonStr);
                 } else if ("sensor_data".equals(dataType)) {
                     handleSensorData(pointId, jsonStr);
+                } else if ("heartbeat".equals(dataType)) {
+                    handleHeartbeat(pointId, jsonStr);
                 } else {
                     log.warn("未知的数据类型: {}", dataType);
                 }
@@ -92,6 +99,23 @@ public class MqttMessageHandler {
             return LocalDateTime.parse(json.getStr("timestamp", LocalDateTime.now().toString()));
         } catch (Exception e) {
             return LocalDateTime.now();
+        }
+    }
+
+    private void handleHeartbeat(String pointId, String jsonStr) {
+        try {
+            JSONObject json = JSONUtil.parseObj(jsonStr);
+            String deviceSn = json.getStr("deviceId", json.getStr("device_sn", pointId));
+            if (deviceSn != null && !deviceSn.isEmpty()) {
+                EdgeDevice device = edgeDeviceMapper.selectById(deviceSn);
+                if (device != null) {
+                    device.setLastHeartbeat(LocalDateTime.now());
+                    device.setStatus(1);
+                    edgeDeviceMapper.updateById(device);
+                }
+            }
+        } catch (Exception e) {
+            log.debug("心跳处理异常: pointId={}", pointId, e);
         }
     }
 }

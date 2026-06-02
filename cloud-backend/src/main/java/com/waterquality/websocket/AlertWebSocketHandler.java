@@ -31,18 +31,25 @@ public class AlertWebSocketHandler extends TextWebSocketHandler {
     }
 
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        // 从子协议中提取JWT令牌进行身份认证
-        String token = extractToken(session);
-        if (token == null || !jwtTokenProvider.validateToken(token)) {
-            session.close(CloseStatus.BAD_DATA);
-            return;
+    public void afterConnectionEstablished(WebSocketSession session) {
+        try {
+            String token = extractToken(session);
+            log.info("WebSocket连接请求: uri={}, token={}", session.getUri(),
+                    token != null ? token.substring(0, Math.min(20, token.length())) + "..." : "null");
+            if (token == null || !jwtTokenProvider.validateToken(token)) {
+                log.warn("WebSocket认证失败: token无效");
+                session.close(CloseStatus.POLICY_VIOLATION);
+                return;
+            }
+            String userId = String.valueOf(jwtTokenProvider.getUserId(token));
+            session.getAttributes().put("userId", userId);
+            session.getAttributes().put("lastHeartbeat", System.currentTimeMillis());
+            sessions.put(userId, session);
+            log.info("WebSocket连接建立: userId={}", userId);
+        } catch (Exception e) {
+            log.error("WebSocket连接处理异常", e);
+            try { session.close(CloseStatus.SERVER_ERROR); } catch (IOException ignored) {}
         }
-        String userId = String.valueOf(jwtTokenProvider.getUserId(token));
-        session.getAttributes().put("userId", userId);
-        session.getAttributes().put("lastHeartbeat", System.currentTimeMillis());
-        sessions.put(userId, session);
-        log.info("WebSocket连接建立: userId={}", userId);
     }
 
     @Override
@@ -119,7 +126,22 @@ public class AlertWebSocketHandler extends TextWebSocketHandler {
         });
     }
 
+    public int getActiveConnectionCount() {
+        return sessions.size();
+    }
+
     private String extractToken(WebSocketSession session) {
+        // 方式1: 从URL查询参数提取 token
+        String query = session.getUri().getQuery();
+        if (query != null) {
+            for (String param : query.split("&")) {
+                String[] kv = param.split("=", 2);
+                if ("token".equals(kv[0]) && kv.length > 1) {
+                    return kv[1];
+                }
+            }
+        }
+        // 方式2: 从子协议提取
         String protocol = session.getHandshakeHeaders().getFirst("Sec-WebSocket-Protocol");
         if (protocol != null && protocol.startsWith("Bearer ")) {
             return protocol.substring(7);
